@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Dotnetcnblog.TagHandlers;
 using Dotnetcnblog.Utils;
 using McMaster.Extensions.CommandLineUtils;
@@ -15,10 +16,9 @@ namespace Dotnetcnblog.Command
     {
         private static readonly Dictionary<string, string> ReplaceDic = new Dictionary<string, string>();
 
-
-        [Option("-f|--file", Description = "需要上传的图片路径")]
         [Required]
-        public string FilePath { get; set; }
+        [Argument(0)]
+        public string[] FilePaths { get; set; }
 
         public int OnExecute(CommandLineApplication app)
         {
@@ -35,16 +35,35 @@ namespace Dotnetcnblog.Command
         {
             try
             {
-                if (!File.Exists(FilePath))
+                var tasks = new List<Task<string>>();
+                foreach (var filePath in FilePaths)
                 {
-                    ConsoleHelper.PrintError($"文件不存在：{FilePath}");
+                    // 使用多线程上传
+                    tasks.Add(Task.Run(() =>
+                    {
+                        try
+                        {
+                            if (!File.Exists(filePath))
+                            {
+                                ConsoleHelper.PrintError($"文件不存在：{filePath}");
+                                return null;
+                            }
+                            else
+                            {
+                                var imgUrl = ImageUploadHelper.Upload(filePath);
+                                return imgUrl;
+                            }
+                        }
+                        catch
+                        {
+                            return "";
+                        }
+                    }));
                 }
-                else
+                Task.WaitAll(tasks.ToArray());
+                foreach (var task in tasks)
                 {
-
-                    var imgUrl = ImageUploadHelper.Upload(FilePath);
-                    ConsoleHelper.PrintMsg($"{FilePath} 上传成功. {imgUrl}");
-                    
+                    ConsoleHelper.PrintMsg($"{task.Result}");
                 }
             }
             catch (Exception e)
